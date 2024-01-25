@@ -1,0 +1,11 @@
+﻿,Values,Units
+Max charging rate,2,MW
+Max discharging rate,2,MW
+Max storage volume,4,MWh
+Battery charging efficiency,0.05,
+Battery discharging efficiency,0.05,
+Lifetime (1),10,years
+Lifetime (2),5000,cycles
+Storage volume degradation rate,0.001,%/cycle
+Capex,500000,£
+Fixed Operational Costs,"£5,000",£/year
