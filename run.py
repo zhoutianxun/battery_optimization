@@ -3,7 +3,7 @@ import argparse
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from src.battery_model import battery_model
+from src.battery_model import BatteryModel
 from src.data_processing import process_data
 
 
@@ -13,7 +13,8 @@ def run_simulation(battery_specs_dict,
                    execution_horizon=48,  
                    delta_t=0.5,
                    trading_freq=[1, 1, 48], 
-                   S_init=0) -> pd.DataFrame:
+                   S_init=0,
+                   consider_depreciation=True) -> pd.DataFrame:
     
     """
     run simulation using battery model on a rolling horizon basis
@@ -41,6 +42,8 @@ def run_simulation(battery_specs_dict,
         the trading_freq = [1, 1, 48], where each unit of time is half hour
     S_init : float, optional (default=0), value between 0 to V_H
         the initial charge status of the battery in MWh
+    consider_depreciation: bool (default=True)
+            does model take depreciation from charging into account
     
     Returns
     -------
@@ -87,22 +90,22 @@ def run_simulation(battery_specs_dict,
         gamma_H = (1 - time_since_start.days/(365.25 * 10)) * battery_specs_dict['Capex']
 
         # Feed data into model and get planning outputs
-        model = battery_model(prices, 
-                              trading_freq=trading_freq, 
-                              delta_t=delta_t,
-                              horizon_length=len(planning_data), 
-                              S_init=S_init,
-                              V_H=V_H,
-                              n_H=n_H,
-                              n_max=battery_specs_dict['n_max'],
-                              gamma_H=gamma_H,
-                              K_C=battery_specs_dict['K_C'],
-                              K_D=battery_specs_dict['K_D'],
-                              eta_C=battery_specs_dict['eta_C'],
-                              eta_D=battery_specs_dict['eta_D'],
-                              f=battery_specs_dict['f'])
+        model = BatteryModel(prices, 
+                             trading_freq=trading_freq, 
+                             delta_t=delta_t,
+                             horizon_length=len(planning_data), 
+                             S_init=S_init,
+                             V_H=V_H,
+                             n_H=n_H,
+                             n_max=battery_specs_dict['n_max'],
+                             gamma_H=gamma_H,
+                             K_C=battery_specs_dict['K_C'],
+                             K_D=battery_specs_dict['K_D'],
+                             eta_C=battery_specs_dict['eta_C'],
+                             eta_D=battery_specs_dict['eta_D'],
+                             f=battery_specs_dict['f'])
 
-        model.create_model()
+        model.create_model(consider_depreciation=consider_depreciation)
         model.solve()
 
         # Only execute plan up to execution horizon

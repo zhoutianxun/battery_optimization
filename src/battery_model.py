@@ -4,7 +4,7 @@ import pandas as pd
 import pulp
 import matplotlib.pyplot as plt
 
-class battery_model:
+class BatteryModel:
     """
     Linear programming optimisation model to charge/discharge the battery over a time horizon in order to maximise profits
     The model finds the optimal trade at each time across several electricity markets
@@ -137,7 +137,7 @@ class battery_model:
             self.trading_freq = [1] * (prices.shape[1]-1)
         else:
             assert hasattr(trading_freq, '__iter__') and len(trading_freq) == prices.shape[1]-1, \
-            "trading_freq needs to be an interable with same length as number of markets as \
+            "trading_freq needs to be an iterable with same length as number of markets as \
                 provided in prices"
             self.trading_freq = trading_freq
         self.delta_t = delta_t
@@ -175,7 +175,7 @@ class battery_model:
             return "Uninitated battery_model"
 
 
-    def create_model(self) -> None:
+    def create_model(self, consider_depreciation=True) -> None:
         """
         initializes PuLP linear programming model with control variables, objective function, and constraints
 
@@ -212,11 +212,18 @@ class battery_model:
                this is implemented by constraining decision variables at mod(time, trading frequency) =/= 0 
                to follow the decision variable value at mod(time, trading frequency) = 0
         
+        Parameters
+        ----------
+        consider_depreciation: bool (default=True)
+            does model take depreciation from charging into account
+
         Returns
         -------
         None
         """
-                
+        if self.model_created == True:
+            return
+
         # initiate problem
         prob = pulp.LpProblem("battery_model", pulp.LpMaximize)
 
@@ -224,7 +231,7 @@ class battery_model:
         self._add_variables()
 
         # add objective function
-        prob = self._add_objective(prob)
+        prob = self._add_objective(prob, consider_depreciation=consider_depreciation)
 
         # add constraints
         prob = self._add_capacity_constraints(prob)
@@ -268,7 +275,7 @@ class battery_model:
                                           cat='Binary')
     
 
-    def _add_objective(self, prob) -> pulp.LpProblem:
+    def _add_objective(self, prob, consider_depreciation) -> pulp.LpProblem:
         """
         Add objective function
             profit 
@@ -283,24 +290,36 @@ class battery_model:
         ----------
         prob : pulp.LpProblem
             LP problem without objective function
-
+        consider_depreciation: bool
+            does model take depreciation from charging into account
         Returns
         -------
         prob : pulp.LpProblem
             LP problem with objective function added
         """
 
-        prob += (
-              pulp.LpAffineExpression(
-                  [(self.discharge[f'D_m{m}_t{t}'], self.delta_t*self.prices[t, m]) 
-                   for t in self.times for m in self.markets])
-            - pulp.LpAffineExpression(
-                  [(self.charge[f'C_m{m}_t{t}'], self.delta_t*self.prices[t, m]) 
-                   for t in self.times for m in self.markets])
-            - pulp.LpAffineExpression(
-                  [(self.charge[f'C_m{m}_t{t}'], self.delta_t*self.depreciation_cost) 
-                   for t in self.times for m in self.markets])
-        )
+        if consider_depreciation:
+            prob += (
+                pulp.LpAffineExpression(
+                    [(self.discharge[f'D_m{m}_t{t}'], self.delta_t*self.prices[t, m]) 
+                    for t in self.times for m in self.markets])
+                - pulp.LpAffineExpression(
+                    [(self.charge[f'C_m{m}_t{t}'], self.delta_t*self.prices[t, m]) 
+                    for t in self.times for m in self.markets])
+                - pulp.LpAffineExpression(
+                    [(self.charge[f'C_m{m}_t{t}'], self.delta_t*self.depreciation_cost) 
+                    for t in self.times for m in self.markets])
+                    )
+        else:
+            prob += (
+                pulp.LpAffineExpression(
+                    [(self.discharge[f'D_m{m}_t{t}'], self.delta_t*self.prices[t, m]) 
+                    for t in self.times for m in self.markets])
+                - pulp.LpAffineExpression(
+                    [(self.charge[f'C_m{m}_t{t}'], self.delta_t*self.prices[t, m]) 
+                    for t in self.times for m in self.markets])
+                    )
+            
         return prob
     
 
@@ -419,10 +438,18 @@ class battery_model:
         """
                 
         for m in self.markets:
-            for t in self.times:
-                if t % self.trading_freq[m-1] != 0:
-                    prob += self.charge[f'C_m{m}_t{t}'] - self.charge[f'C_m{m}_t{t-1}'] == 0 
-                    prob += self.discharge[f'D_m{m}_t{t}'] - self.discharge[f'D_m{m}_t{t-1}'] == 0 
+            freq_m = self.trading_freq[m-1]
+            if freq_m != 0:
+                for t in self.times:
+                    if t % freq_m != 0:
+                        trade_window_start = (t//freq_m)*freq_m
+                        prob += self.charge[f'C_m{m}_t{t}'] == self.charge[f'C_m{m}_t{trade_window_start}']
+                        prob += self.discharge[f'D_m{m}_t{t}'] == self.discharge[f'D_m{m}_t{trade_window_start}']
+
+            # for t in self.times:
+            #     if t % self.trading_freq[m-1] != 0:
+            #         prob += self.charge[f'C_m{m}_t{t}'] - self.charge[f'C_m{m}_t{t-1}'] == 0 
+            #         prob += self.discharge[f'D_m{m}_t{t}'] - self.discharge[f'D_m{m}_t{t-1}'] == 0 
         
         return prob
     
@@ -438,6 +465,9 @@ class battery_model:
 
         if self.model_created == False:
             raise Exception("Model not created yet, run create_model method first")
+        
+        if self.solved == True:
+            return 
         
         self.prob.solve(pulp.apis.PULP_CBC_CMD(msg=0))
         self.solved = True
