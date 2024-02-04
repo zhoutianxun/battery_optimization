@@ -14,6 +14,7 @@ This repository contains the code for a battery optimization model that maximize
     |- battery_model.py
     |- data_processing.py
 |- demo_notebook.ipynb
+|- model_design.pdf
 |- requirements.yml
 |- run.py
 ``` 
@@ -22,6 +23,7 @@ This repository contains the code for a battery optimization model that maximize
 * ```output/``` folder contains the output of the simulation over the entire period in csv file. The file is generated as output of ```run.py```.
 * ```src/``` folder contains code for data processing and the battery model class
 * ```demo_notebook.ipynb``` is a jupyter notebook for interactive analysis
+* ```model_design.pdf``` contains information on how the battery model is designed
 * ```requirements.yml``` is the conda requirement file for environment setup
 * ```run.py``` is the main code to run the simulation
 
