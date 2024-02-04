@@ -75,16 +75,14 @@ def run_simulation(battery_specs_dict,
     V_t = np.zeros(len(all_data))
 
     # Iterate over all time horizons until end
-    for H in tqdm(range(0, len(all_data), execution_horizon)):
+    bar = tqdm(range(0, len(all_data), execution_horizon))
+    for H in bar:
 
         # get planning horizon data
         planning_data = all_data.iloc[H:H+planning_horizon]
         prices = planning_data.to_numpy()
 
-        # Compute battery property variables, V_H, n_H, gamma_H for current horizon
-        # volume of battery:          V_t = V_0 - f \sum(C_t) 
-        # number of cycles completed: n_t = \sum(C_t/V_t)
-
+        # compute remaining battery value gamma_H
         horizon_start_time = planning_data.iloc[0, 0]
         time_since_start = horizon_start_time - START_TIME
         gamma_H = (1 - time_since_start.days/(365.25 * 10)) * battery_specs_dict['Capex']
@@ -112,13 +110,7 @@ def run_simulation(battery_specs_dict,
         plan = model.get_output().iloc[:execution_horizon]
         output = pd.concat((output, plan), ignore_index=True)
 
-        # Keep track of parameters
-        # V_t = (
-        #     battery_specs_dict['V_init'] 
-        #        - battery_specs_dict['f'] 
-        #        * output['Total charge (MW)'].cumsum()
-        #     )
-        
+        # Compute battery property variables, V_H, n_H for upcoming horizon
         for t in range(H, H+len(plan)):
             if t == 0:
                 V_prev = battery_specs_dict['V_init']
@@ -127,15 +119,21 @@ def run_simulation(battery_specs_dict,
             V_t[t] = (
                 V_prev * (1-battery_specs_dict['f'])**(output['Total charge (MW)'].iloc[t]/V_prev)
                 )
-
-        n_H = (output['Total charge (MW)']/V_t[:H+len(plan)]).sum()
-        S_init = output['Storage value (MWh)'].iloc[-1]
         
-        battery_value[H:H+len(plan)] = gamma_H
-        completed_cycles[H:H+len(plan)] = n_H
+        completed_cycles[H:H+len(plan)] = n_H + (output.iloc[H:H+len(plan)]['Total charge (MW)']/V_t[H:H+len(plan)]).cumsum()
+        S_init = output['Storage value (MWh)'].iloc[-1]
+        V_H = V_t[t]
+        n_H = completed_cycles[t]
+        
+        # Because we approximated V_t with the value V_H at start of horizon, S_init may exceed actual V_t at end of horizon
+        # in such case, we print to screen the error of estimation (%) for S_init, 
+        # and force S_init to actual V_t for start of next horizon
+        if S_init > V_H:
+            S_init = V_H
+            bar.set_description(f"error due to approximation of V_t with V_H at horizon t={H}: {(S_init - V_H)/S_init *100:.5f}%")
     
     output['Battery volume (MWh)'] = V_t
-    output['Battery value (£)'] = battery_value
+    output['Battery value (£)'] = (1 - np.arange(0, len(all_data)*0.5/24, 0.5/24)/(365.25*10)) * battery_specs_dict['Capex']
     output['Completed cycles'] = completed_cycles
     return output
 
