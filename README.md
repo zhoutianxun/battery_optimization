@@ -14,6 +14,7 @@ For this exercise, I formulated the problem as a linear program. The objective f
 |- output/
     |- output.csv
 |- src/
+    |- baseline_model.py
     |- battery_model.py
     |- data_processing.py
 |- demo_notebook.ipynb

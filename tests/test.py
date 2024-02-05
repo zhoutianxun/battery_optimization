@@ -131,7 +131,6 @@ class TestBatteryModel(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    
     # stress testing
     # randomly choose 30 horizons of data to run suite of test on
     for timestart in np.random.choice(365, 30):
